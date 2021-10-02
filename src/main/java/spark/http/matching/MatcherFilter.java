@@ -16,31 +16,23 @@
  */
 package spark.http.matching;
 
-import java.io.IOException;
-
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-import spark.CustomErrorPages;
-import spark.ExceptionMapper;
-import spark.HaltException;
-import spark.RequestResponseFactory;
-import spark.Response;
+import spark.*;
 import spark.embeddedserver.jetty.HttpRequestWrapper;
 import spark.route.HttpMethod;
 import spark.serialization.SerializerChain;
 import spark.staticfiles.StaticFilesConfiguration;
 
+import javax.servlet.Filter;
+import javax.servlet.*;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 /**
  * Matches Spark routes and filters.
  *
  * @author Per Wendel
+ * @author kamenitxan
  */
 public class MatcherFilter implements Filter {
 
@@ -94,18 +86,15 @@ public class MatcherFilter implements Filter {
         HttpServletRequest httpRequest = (HttpServletRequest) servletRequest;
         HttpServletResponse httpResponse = (HttpServletResponse) servletResponse;
 
-        // handle static resources
-        boolean consumedByStaticFile = staticFiles.consume(httpRequest, httpResponse);
-
-        if (consumedByStaticFile) {
-            return;
-        }
-
         String method = getHttpMethodFrom(httpRequest);
 
         String httpMethodStr = method.toLowerCase();
         String uri = httpRequest.getRequestURI();
-        String acceptType = httpRequest.getHeader(ACCEPT_TYPE_REQUEST_MIME_HEADER);
+        String rawAcceptType = httpRequest.getHeader(ACCEPT_TYPE_REQUEST_MIME_HEADER);
+        String acceptType = null;
+        if (rawAcceptType != null) {
+            acceptType = rawAcceptType.replaceAll("[\n|\r\t]", "_");
+        }
 
         Body body = Body.create();
 
@@ -117,20 +106,24 @@ public class MatcherFilter implements Filter {
         HttpMethod httpMethod = HttpMethod.get(httpMethodStr);
 
         RouteContext context = RouteContext.create()
-                .withMatcher(routeMatcher)
-                .withHttpRequest(httpRequest)
-                .withUri(uri)
-                .withAcceptType(acceptType)
-                .withBody(body)
-                .withRequestWrapper(requestWrapper)
-                .withResponseWrapper(responseWrapper)
-                .withResponse(response)
-                .withHttpMethod(httpMethod);
+            .withMatcher(routeMatcher)
+            .withHttpRequest(httpRequest)
+            .withUri(uri)
+            .withAcceptType(acceptType)
+            .withBody(body)
+            .withRequestWrapper(requestWrapper)
+            .withResponseWrapper(responseWrapper)
+            .withResponse(response)
+            .withHttpMethod(httpMethod);
 
         try {
             try {
-
                 BeforeFilters.execute(context);
+                // handle static resources
+                boolean consumedByStaticFile = staticFiles.consume(httpRequest, httpResponse);
+                if (consumedByStaticFile) {
+                    return;
+                }
                 Routes.execute(context);
                 AfterFilters.execute(context);
 
@@ -141,13 +134,13 @@ public class MatcherFilter implements Filter {
             } catch (Exception generalException) {
 
                 GeneralError.modify(
-                        httpRequest,
-                        httpResponse,
-                        body,
-                        requestWrapper,
-                        responseWrapper,
-                        exceptionMapper,
-                        generalException);
+                    httpRequest,
+                    httpResponse,
+                    body,
+                    requestWrapper,
+                    responseWrapper,
+                    exceptionMapper,
+                    generalException);
 
             }
 
@@ -156,16 +149,14 @@ public class MatcherFilter implements Filter {
                 body.set("");
             }
 
-            if (body.notSet() && hasOtherHandlers) {
-                if (servletRequest instanceof HttpRequestWrapper) {
-                    ((HttpRequestWrapper) servletRequest).notConsumed(true);
-                    return;
-                }
+            if (body.notSet() && hasOtherHandlers && servletRequest instanceof HttpRequestWrapper) {
+                ((HttpRequestWrapper) servletRequest).notConsumed(true);
+                return;
             }
 
-            if (body.notSet()) {
+            if (body.notSet() && !externalContainer) {
                 LOG.info("The requested route [{}] has not been mapped in Spark for {}: [{}]",
-                         uri, ACCEPT_TYPE_REQUEST_MIME_HEADER, acceptType);
+                    uri, ACCEPT_TYPE_REQUEST_MIME_HEADER, acceptType);
                 httpResponse.setStatus(HttpServletResponse.SC_NOT_FOUND);
 
                 if (CustomErrorPages.existsFor(404)) {
@@ -173,7 +164,7 @@ public class MatcherFilter implements Filter {
                     responseWrapper.setDelegate(RequestResponseFactory.create(httpResponse));
                     body.set(CustomErrorPages.getFor(404, requestWrapper, responseWrapper));
                 } else {
-                    body.set(String.format(CustomErrorPages.NOT_FOUND));
+                    body.set(CustomErrorPages.NOT_FOUND);
                 }
             }
         } finally {
@@ -181,13 +172,13 @@ public class MatcherFilter implements Filter {
                 AfterAfterFilters.execute(context);
             } catch (Exception generalException) {
                 GeneralError.modify(
-                        httpRequest,
-                        httpResponse,
-                        body,
-                        requestWrapper,
-                        responseWrapper,
-                        exceptionMapper,
-                        generalException);
+                    httpRequest,
+                    httpResponse,
+                    body,
+                    requestWrapper,
+                    responseWrapper,
+                    exceptionMapper,
+                    generalException);
             }
         }
 
@@ -209,6 +200,7 @@ public class MatcherFilter implements Filter {
 
     @Override
     public void destroy() {
+        // nothing to clean
     }
 
 
