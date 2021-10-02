@@ -1,18 +1,8 @@
-[![](https://img.shields.io/travis/perwendel/spark.svg)](https://travis-ci.org/perwendel/spark)
 [![](https://img.shields.io/github/license/perwendel/spark.svg)](./LICENSE)
-[![](https://img.shields.io/maven-central/v/com.sparkjava/spark-core.svg)](http://mvnrepository.com/artifact/com.sparkjava/spark-core)
 
 Spark - a tiny web framework for Java 8
 ==============================================
 
-**Spark 2.9.3 is out!!**  <a href="https://github.com/perwendel/spark/blob/master/changeset/2.9.3-changeset.md">Changeset</a> 
-```xml
-<dependency>
-    <groupId>com.sparkjava</groupId>
-    <artifactId>spark-core</artifactId>
-    <version>2.9.3</version>
-</dependency>
-```
 
 Sponsor the project here https://github.com/sponsors/perwendel
 
@@ -31,7 +21,7 @@ Getting started
 <dependency>
     <groupId>com.sparkjava</groupId>
     <artifactId>spark-core</artifactId>
-    <version>2.9.2</version>
+    <version>2.9.4-JAKON</version>
 </dependency>
 ```
 
