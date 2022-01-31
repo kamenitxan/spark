@@ -95,6 +95,36 @@ public class RouteEntryTest {
     }
 
     @Test
+    public void testMatches_BeforeWithWildcardOnEntryPath() {
+
+        RouteEntry entry = new RouteEntry();
+        entry.httpMethod = HttpMethod.get;
+        entry.path = "/test*";
+
+        assertTrue("Should return true because path specified is covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/test"));
+        assertTrue("Should return true because path specified is covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/test/"));
+        assertTrue("Should return true because path specified is covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/test/me/6"));
+    }
+
+    @Test
+    public void testMatches_BeforeWithWildcardOnEntryPathDoNotMatch() {
+
+        RouteEntry entry = new RouteEntry();
+        entry.httpMethod = HttpMethod.get;
+        entry.path = "/test*";
+
+        assertFalse("Should return false because path is not covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/fail"));
+        assertFalse("Should return false because path is not covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/fail/"));
+        assertFalse("Should return false because path is not covered by the route path wildcard",
+            entry.matches(HttpMethod.get, "/fail/me/6"));
+    }
+
+    @Test
     public void testMatches_PathsDoNotMatch() {
 
         RouteEntry entry = new RouteEntry();

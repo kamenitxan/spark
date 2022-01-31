@@ -83,6 +83,10 @@ class RouteEntry {
                     // wildcard match
                     return true;
                 }
+                if ( this.path.endsWith("*") && thisPathPart.startsWith(pathPart) && (i == thisPathSize - 1)) {
+                    // wildcard match
+                    return true;
+                }
 
                 if ((!thisPathPart.startsWith(":"))
                         && !thisPathPart.equals(pathPart)
@@ -108,6 +112,10 @@ class RouteEntry {
                         String thisPathPart = thisPathList.get(i);
                         String pathPart = pathList.get(i);
                         if (thisPathPart.equals("*") && (i == thisPathSize - 1) && this.path.endsWith("*")) {
+                            // wildcard match
+                            return true;
+                        }
+                        if (this.path.endsWith("*") && thisPathPart.startsWith(pathPart) && (i == thisPathSize - 1)) {
                             // wildcard match
                             return true;
                         }
