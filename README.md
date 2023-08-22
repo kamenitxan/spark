@@ -1,9 +1,125 @@
+## Spark: a tiny web framework for Java, Kotlin and Groovy
+
+----------------------------------------
+
+# About this fork (unofficial build)
+
+[![](https://img.shields.io/github/actions/workflow/status/intellisrc/spark/ci.yml)](https://github.com/Intellisrc/spark/actions/workflows/ci.yml)
+[![](https://img.shields.io/github/issues-pr-closed/intellisrc/spark)](./PR-STATUS.md)
+[![](https://img.shields.io/github/license/intellisrc/spark.svg)](./LICENSE)
+[![](https://img.shields.io/maven-central/v/com.intellisrc/spark-core.svg)](http://mvnrepository.com/artifact/com.intellisrc/spark-core)
+
+The goal of this fork is to update Spark from the community pull requests and update dependencies until the official repository is back to regular maintenance.
+
+You can see the merge progress in [PR-STATUS](PR-STATUS.md)
+
+## Using it
+
+In order to use this fork version, you need to change your spark dependency.
+
+***NOTE:*** As all classes and packages remain in the same location, you don't need to change your code.
+
+### Maven
+```xml
+<dependency>
+  <groupId>com.intellisrc</groupId>
+  <artifactId>spark-core</artifactId>
+  <version>2.9.4-unofficial-5</version>
+</dependency>
+```
+
+### Gradle
+
+```groovy
+dependencies {
+    implementation 'com.intellisrc:spark-core:2.9.4-unofficial-5'
+}
+```
+
+## Release 1
+
+These are the patches included in `unofficial-1`:
+
+Bug fixes:
+* Method not allowed (Error 405) (perwendel/spark#1234)
+* have ": " in request params map (perwendel/spark#1232)
+* handling the trailing slash (perwendel/spark#1219)
+* change HashMap to ConcurrentHashMap (perwendel/spark#1218 , perwendel/spark#1211, perwendel/spark#1210)
+
+Improvements:
+* make route parameter optional (perwendel/spark#1229)
+* Improved tests (perwendel/spark#1257 , perwendel/spark#1228 , perwendel/spark#1227)
+
+Security:
+* Upgrade Dependencies (perwendel/spark#1239 , perwendel/spark#1232 , perwendel/spark#1215 , perwendel/spark#1207)
+* Disable server version response header (perwendel/spark#1214)
+
+## Release 2
+
+These are the patches included in `unofficial-2`:
+
+Bug fixes:
+* Initiate the servlet instance in exception mapper (perwendel#1137)
+
+Improvements:
+* Added extra information to get server parameters (perwendel/spark#1175)
+* ResponseTransformer should have access to Request & Response (perwendel/spark#1174)
+* Allow to set default content-type (perwendel#1173)
+* Set custom session store (perwendel#1173)
+* Allow configuring endpointIdentificationAlgorithm for jetty SSL (perwendel#1153)
+
+## Release 3
+
+These are the patches included in `unofficial-3`:
+
+Bug fixes:
+* Fixed GZip content-length problem - Issue: perwendel#1157 (also perwendel#459, perwendel#742 and perwendel#937)
+
+Improvements:
+* Added additional mime types (like 'video/mp4') - Issue: perwendel#997
+* Allow to override or add mime types (perwendel#997)
+* Added `brotli` compression support (additionally to GZip) 
+* Regex support in paths 
+* HTTP/2 support (perwendel#1183)
+
+## Release 4
+
+These are the patches included in `unofficial-4`:
+
+Bug fixes:
+* Fixed optional trailing slash when used with params
+* Fixed incorrect response based on acceptType (perwendel#1077) (PR: perwendel/spark#1238)
+* Fixed incorrect handling when using invalid methods (perwendel/spark#1236) (PR: perwendel#1204)
+
+Improvements:
+* Added unicode support in paths (issue perwendel#1026) (PR: perwendel/spark#1222)
+
+## Release 5
+
+These are the patches included in `unofficial-5`:
+
+Bug fixes:
+* NullPointerException in response.header (perwendel/spark/issues/1273)
+* Make WebSocketServletContextHandlerFactory.create() not static (perwendel/spark/issues/1208)
+* ConcurrentModificationException from spark.route.Routes (perwendel/spark/issues/1243)
+* Servlet exception mapper cleanup (perwendel/spark/issues/1213)
+
+Improvements:
+* Code updated to Java 11
+* Jetty updated to 11
+* Added support for multiple calls to `staticFileLocation` and `externalStaticFileLocation` (perwendel/spark/issues/568)
+
+More details and examples on the differences between the Official version and this one: [DIFFERENCES.md](DIFFERENCES.md)
+
+----------------------------------------
+
+# About Spark (official build)
+
+[![](https://img.shields.io/travis/perwendel/spark.svg)](https://travis-ci.org/perwendel/spark)
 [![](https://img.shields.io/github/license/perwendel/spark.svg)](./LICENSE)
+[![](https://img.shields.io/maven-central/v/com.sparkjava/spark-core.svg)](http://mvnrepository.com/artifact/com.sparkjava/spark-core)
 
-Spark - a tiny web framework for Java 8
-==============================================
-
-**Spark 2.9.4 is out!!**
+**Spark 2.9.4 is out!!**  <a href="https://github.com/perwendel/spark/blob/master/changeset/2.9.4-changeset.md">Changeset</a> 
 ```xml
 <dependency>
     <groupId>com.sparkjava</groupId>
@@ -29,7 +145,7 @@ Getting started
 <dependency>
     <groupId>com.sparkjava</groupId>
     <artifactId>spark-core</artifactId>
-    <version>2.9.4-JAKON</version>
+    <version>2.9.4</version>
 </dependency>
 ```
 

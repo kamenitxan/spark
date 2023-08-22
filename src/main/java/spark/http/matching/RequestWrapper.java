@@ -19,8 +19,7 @@ package spark.http.matching;
 import java.util.Map;
 import java.util.Set;
 
-import javax.servlet.http.HttpServletRequest;
-
+import jakarta.servlet.http.HttpServletRequest;
 import spark.Access;
 import spark.QueryParamsMap;
 import spark.Request;
@@ -122,6 +121,10 @@ final class RequestWrapper extends Request {
     @Override
     public String params(String param) {
         return delegate.params(param);
+    }
+    @Override
+    public String params(int index) {
+        return delegate.params(index);
     }
 
     @Override

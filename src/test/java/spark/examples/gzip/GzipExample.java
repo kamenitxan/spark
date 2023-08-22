@@ -16,6 +16,7 @@
  */
 package spark.examples.gzip;
 
+import static spark.Response.Compression.*;
 import static spark.Spark.awaitInitialization;
 import static spark.Spark.get;
 import static spark.Spark.staticFileLocation;
@@ -43,7 +44,7 @@ public class GzipExample {
     public static void addRoutes() {
         get("/hello", (q, a) -> FO_SHIZZY);
         get(PATH, (req, resp) -> {
-            resp.header("Content-Encoding", "gzip");
+            resp.compression = GZIP_COMPRESS;
             return CONTENT;
         });
     }

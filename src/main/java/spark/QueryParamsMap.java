@@ -6,7 +6,7 @@ import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * These objects represent the parameters sent on a Http Request. <br>
@@ -36,12 +36,12 @@ public class QueryParamsMap {
     /**
      * Pattern for parsing the key of querystring
      */
-    private static final Pattern KEY_PATTERN = Pattern.compile("\\A[\\[\\]]*([^\\[\\]]+)\\]*");
+    private static final Pattern KEY_PATTERN = Pattern.compile("\\A[\\[\\]]*([^\\[\\]]+)]*");
 
     /**
      * Holds the nested keys
      */
-    private Map<String, QueryParamsMap> queryMap = new HashMap<>();
+    private final Map<String, QueryParamsMap> queryMap = new HashMap<>();
 
     /**
      * Value(s) for this key
@@ -133,7 +133,7 @@ public class QueryParamsMap {
         }
     }
 
-    protected static final String cleanKey(String group) {
+    protected static String cleanKey(String group) {
         if (group.startsWith("[")) {
             return group.substring(1, group.length() - 1);
         } else {
@@ -160,11 +160,7 @@ public class QueryParamsMap {
     public QueryParamsMap get(String... keys) {
         QueryParamsMap ret = this;
         for (String key : keys) {
-            if (ret.queryMap.containsKey(key)) {
-                ret = ret.queryMap.get(key);
-            } else {
-                ret = NULL;
-            }
+            ret = ret.queryMap.getOrDefault(key, NULL);
         }
         return ret;
     }

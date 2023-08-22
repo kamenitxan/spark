@@ -5,14 +5,19 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.security.KeyStore;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -40,6 +45,16 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
+import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.http.HttpField;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http2.client.HTTP2Client;
+import org.eclipse.jetty.http2.client.http.HttpClientTransportOverHTTP2;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+
+import static org.eclipse.jetty.http.HttpVersion.HTTP_2;
 
 public class SparkTestUtil {
 
@@ -136,6 +151,140 @@ public class SparkTestUtil {
         return urlResponse;
     }
 
+    public UrlResponse doHttp2Method(String requestMethod, String path, String body)
+        throws Exception {
+        return doHttp2Method(requestMethod, path, body, false, "text/html", null);
+    }
+
+    public UrlResponse doHttp2Method(String requestMethod, String path, String body, String acceptType)
+        throws Exception {
+        return doHttp2Method(requestMethod, path, body, false, acceptType, null);
+    }
+
+    public UrlResponse doHttp2MethodSecure(String requestMethod, String path, String body)
+        throws Exception {
+        return doHttp2Method(requestMethod, path, body, true, "text/html", null);
+    }
+
+    public UrlResponse doHttp2Method(String requestMethod, String path, String body, boolean secureConnection,
+                                     String acceptType, Map<String, String> reqHeaders) throws Exception {
+
+        HttpUriRequest httpRequest = getHttpRequest(requestMethod, path, body, secureConnection, acceptType, reqHeaders);
+        if(secureConnection) {
+            java.net.http.HttpClient client;
+            X509TrustManager nullTrustManager = new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+                public X509Certificate[] getAcceptedIssuers() { return null; }
+            };
+
+            HostnameVerifier nullHostnameVerifier = (hostname, session) -> true;
+
+            SSLContext sc = SSLContext.getInstance("SSL");
+            sc.init(null, new TrustManager[] {nullTrustManager}, null);
+
+            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+            HttpsURLConnection.setDefaultHostnameVerifier(nullHostnameVerifier);
+
+            client = java.net.http.HttpClient.newBuilder().sslContext(sc).build();
+            java.net.http.HttpRequest.BodyPublisher bodyPublisher = java.net.http.HttpRequest.BodyPublishers.ofString(body == null ? "" : body);
+
+            java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder(httpRequest.getURI()).method(requestMethod.toUpperCase(), bodyPublisher);
+            if(reqHeaders != null &&! reqHeaders.isEmpty()) { builder = builder.headers(convertToStringArray(reqHeaders)); }
+            java.net.http.HttpRequest request = builder.build();
+
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            UrlResponse urlResponse = new UrlResponse();
+            urlResponse.status = response.statusCode();
+            urlResponse.body = response.body();
+            urlResponse.headers = new HashMap<>();
+            response.headers().map().keySet().forEach(key -> urlResponse.headers.put(key, response.headers().map().get(key).get(0)));
+            return urlResponse;
+        } else {
+            /* This code does not work for HTTPS. That is the reason of the above code */
+            org.eclipse.jetty.client.HttpClient http2Client = null;
+
+            try {
+                http2Client = getHttp2Client();
+                http2Client.start();
+                Request http2Request = getHttp2Request(http2Client, requestMethod, path, body, secureConnection, acceptType, reqHeaders);
+                ContentResponse response = http2Request.send();
+
+                UrlResponse urlResponse = new UrlResponse();
+                urlResponse.status = response.getStatus();
+
+                if (response.getContent() != null) {
+                    urlResponse.body = response.getContentAsString();
+                } else {
+                    urlResponse.body = "";
+                }
+                Map<String, String> headers = new HashMap<>();
+                HttpFields allHeaders = response.getHeaders();
+                for (HttpField header : allHeaders) {
+                    headers.put(header.getName(), header.getValue());
+                }
+                urlResponse.headers = headers;
+
+                return urlResponse;
+            } finally {
+                if (http2Client != null) {
+                    try {
+                        http2Client.stop();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+    }
+
+    private org.eclipse.jetty.client.HttpClient getHttp2Client() {
+        HTTP2Client http2Client = new HTTP2Client();
+
+        SslContextFactory sslContextFactory = new SslContextFactory.Client();
+        sslContextFactory.setEndpointIdentificationAlgorithm("");
+
+        sslContextFactory.setTrustStorePath(getTrustStoreLocation());
+        sslContextFactory.setTrustStorePassword(getTrustStorePassword());
+
+        return new org.eclipse.jetty.client.HttpClient(new HttpClientTransportOverHTTP2(http2Client));
+    }
+
+    private Request getHttp2Request(org.eclipse.jetty.client.HttpClient httpClient,
+                                    String requestMethod,
+                                    String path,
+                                    String body,
+                                    boolean secureConnection,
+                                    String acceptType,
+                                    Map<String, String> reqHeaders) {
+            String protocol = secureConnection ? "https" : "http";
+            String uri = protocol + "://localhost:" + port + path;
+
+            Request request = httpClient.newRequest(uri);
+            request.version(HTTP_2);
+            addHeaders(reqHeaders, request);
+            request.method(requestMethod);
+
+            switch (requestMethod) {
+                case "GET":
+                case "DELETE":
+                    request.header("Accept", acceptType);
+                    return request;
+                case "HEAD":
+                case "TRACE":
+                case "OPTIONS":
+                case "LOCK":
+                    return request;
+                case "POST":
+                case "PATCH":
+                case "PUT":
+                    request.header("Accept", acceptType);
+                    request.content(new StringContentProvider(body));
+                    return request;
+                default:
+                    throw new IllegalArgumentException("Unknown method " + requestMethod);
+            }
+    }
+
     private HttpUriRequest getHttpRequest(String requestMethod, String path, String body, boolean secureConnection,
                                           String acceptType, Map<String, String> reqHeaders) {
         try {
@@ -215,6 +364,14 @@ public class SparkTestUtil {
         if (reqHeaders != null) {
             for (Map.Entry<String, String> header : reqHeaders.entrySet()) {
                 req.addHeader(header.getKey(), header.getValue());
+            }
+        }
+    }
+
+    private void addHeaders(Map<String, String> reqHeaders, Request req) {
+        if (reqHeaders != null) {
+            for (Map.Entry<String, String> header : reqHeaders.entrySet()) {
+                req.header(header.getKey(), header.getValue());
             }
         }
     }
@@ -327,4 +484,19 @@ public class SparkTestUtil {
         }
     }
 
+
+    static String[] convertToStringArray(Map<String, String> map) {
+        if (map == null) {
+            return new String[0];
+        }
+        String[] stringArray = new String[map.size() * 2];
+        int index = 0;
+
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            stringArray[index++] = entry.getKey();
+            stringArray[index++] = entry.getValue();
+        }
+
+        return stringArray;
+    }
 }

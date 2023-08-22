@@ -19,6 +19,7 @@ package spark.embeddedserver;
 import java.util.Map;
 import java.util.Optional;
 
+import spark.embeddedserver.jetty.eventsource.EventSourceHandlerWrapper;
 import spark.embeddedserver.jetty.websocket.WebSocketHandlerWrapper;
 import spark.ssl.SslStores;
 
@@ -36,14 +37,17 @@ public interface EmbeddedServer {
      * @param sslStores               - The SSL sslStores.
      * @param maxThreads              - max nbr of threads.
      * @param minThreads              - min nbr of threads.
+     * @param threadIdleTimeoutMillis - idle timeout (ms).
+     * @param http2Enabled            - whether http2 is enabled or not.
      * @return The port number the server was launched on.
      */
     int ignite(String host,
-                   int port,
-                   SslStores sslStores,
-                   int maxThreads,
-                   int minThreads,
-                   int threadIdleTimeoutMillis) throws Exception;
+               int port,
+               SslStores sslStores,
+               int maxThreads,
+               int minThreads,
+               int threadIdleTimeoutMillis,
+               boolean http2Enabled) throws Exception;
 
 
     /**
@@ -65,6 +69,15 @@ public interface EmbeddedServer {
                                      Optional<Long> webSocketIdleTimeoutMillis) {
 
         NotSupportedException.raise(getClass().getSimpleName(), "Web Sockets");
+    }
+
+    /**
+     * Configures the event source servlets for the embedded server.
+     *
+     * @param eventSourceHandlers          - event source handlers.
+     */
+    default void configureEventSourcing(Map<String, EventSourceHandlerWrapper> eventSourceHandlers) {
+        NotSupportedException.raise(getClass().getSimpleName(), "Event Source Servlets");
     }
 
     /**

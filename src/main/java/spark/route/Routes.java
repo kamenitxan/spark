@@ -17,10 +17,11 @@
 package spark.route;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import spark.FilterImpl;
 import spark.RouteImpl;
@@ -39,7 +40,7 @@ public class Routes {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(Routes.class);
     private static final char SINGLE_QUOTE = '\'';
 
-    private List<RouteEntry> routes;
+    private final CopyOnWriteArrayList<RouteEntry> routes;
 
     public static Routes create() {
         return new Routes();
@@ -49,7 +50,7 @@ public class Routes {
      * Constructor
      */
     protected Routes() {
-        routes = new ArrayList<>();
+        routes = new CopyOnWriteArrayList<>();
     }
 
     /**
@@ -100,7 +101,7 @@ public class Routes {
 
         for (RouteEntry routeEntry : routeEntries) {
             if (acceptType != null) {
-                String bestMatch = MimeParse.bestMatch(Arrays.asList(routeEntry.acceptedType), acceptType);
+                String bestMatch = MimeParse.bestMatch(Collections.singletonList(routeEntry.acceptedType), acceptType);
 
                 if (routeWithGivenAcceptType(bestMatch)) {
                     matchSet.add(new RouteMatch(routeEntry.target, routeEntry.path, path, acceptType, httpMethod));
@@ -118,9 +119,8 @@ public class Routes {
      */
     public List<RouteMatch> findAll() {
         List<RouteMatch> matchSet = new ArrayList<>();
-        List<RouteEntry> routeEntries = routes;
 
-        for (RouteEntry routeEntry : routeEntries) {
+        for (RouteEntry routeEntry : routes) {
             matchSet.add(new RouteMatch(routeEntry.target, routeEntry.path, "ALL_ROUTES", routeEntry.acceptedType, routeEntry.httpMethod));
         }
 
@@ -175,7 +175,7 @@ public class Routes {
             throw new IllegalArgumentException("path cannot be null or blank");
         }
 
-        return removeRoute((HttpMethod) null, path);
+        return removeRoute(null, path);
     }
 
     //////////////////////////////////////////////////
@@ -183,12 +183,21 @@ public class Routes {
     //////////////////////////////////////////////////
 
     private void add(HttpMethod method, String url, String acceptedType, Object target) {
+        // Aliases for "/"
+        if(url.equals("")) { url = "/"; }
+        else if(url.equals("/?")) { url = "/"; }
+
         RouteEntry entry = new RouteEntry();
         entry.httpMethod = method;
         entry.path = url;
         entry.target = target;
         entry.acceptedType = acceptedType;
         LOG.debug("Adds route: " + entry);
+        if(find(method, url, acceptedType) != null) {
+            // While it is not really an issue, it is better to report it as it might be a mistake,
+            // for example: `/:dir` and `/user` will match the same path: `/user`.
+            LOG.info("Another route already exists with (Method: {}, Path: {}, Accepted Type: {})", method.toString(), url, acceptedType);
+        }
         // Adds to end of list
         routes.add(entry);
     }
@@ -211,7 +220,7 @@ public class Routes {
     }
 
     private List<RouteEntry> findTargetsForRequestedRoute(HttpMethod httpMethod, String path) {
-        List<RouteEntry> matchSet = new ArrayList<RouteEntry>();
+        List<RouteEntry> matchSet = new ArrayList<>();
         for (RouteEntry entry : routes) {
             if (entry.matches(httpMethod, path)) {
                 matchSet.add(entry);
@@ -252,7 +261,7 @@ public class Routes {
             }
 
             if (routeEntry.matches(httpMethodToMatch, path)) {
-                LOG.debug("Removing path {}", path, httpMethod == null ? "" : " with HTTP method " + httpMethod);
+                LOG.debug("Removing path {}{}", path, httpMethod == null ? "" : " with HTTP method " + httpMethod);
 
                 forRemoval.add(routeEntry);
             }

@@ -18,11 +18,16 @@ package spark.examples.hello;
 
 import static spark.Spark.get;
 
+/**
+ * Minimal example
+ * You can test from command with:
+ * > curl -i 'http://localhost:4567/'
+ */
+@SuppressWarnings("JavadocLinkAsPlainText")
 public class HelloWorld {
 
     public static void main(String[] args) {
-
-        get("/hello", (request, response) -> "Hello World!");
+        get("/", (request, response) -> "Hello World!");
 
     }
 

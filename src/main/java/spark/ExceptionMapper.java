@@ -16,15 +16,15 @@
  */
 package spark;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ExceptionMapper {
 
     /**
      * Holds an exception mapper instance for use in servlet mode
      */
-    private static ExceptionMapper servletInstance;
+    private static ExceptionMapper servletInstance = new ExceptionMapper();
 
     @Deprecated
     public static ExceptionMapper getInstance() {
@@ -37,9 +37,6 @@ public class ExceptionMapper {
      * @return servlet instance
      */
     public synchronized static ExceptionMapper getServletInstance() {
-        if (servletInstance == null) {
-            servletInstance = new ExceptionMapper();
-        }
         return servletInstance;
     }
 
@@ -52,7 +49,7 @@ public class ExceptionMapper {
      * Class constructor
      */
     public ExceptionMapper() {
-        this.exceptionMap = new HashMap<>();
+        this.exceptionMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -94,7 +91,8 @@ public class ExceptionMapper {
 
             // No handler found either for the superclasses of the exception class
             // We cache the null value to prevent future
-            this.exceptionMap.put(exceptionClass, null);
+            // We do not need to cache the null value. comment by lloyd.
+            // this.exceptionMap.put(exceptionClass, null);
             return null;
         }
 

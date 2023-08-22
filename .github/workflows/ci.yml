@@ -2,6 +2,7 @@ name: Spark Framework CI
 
 on:
   push:
+      branches: [ "master" ]
   pull_request:
 
 jobs:
@@ -9,8 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
-        java: [ '1.8', '1.9', '1.10', '1.11' ]
+        java: [ '11' ]
     name: Java Version ${{ matrix.java }}
     steps:
       - uses: actions/checkout@master
@@ -19,4 +21,5 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
           architecture: x64
+          cache: maven
       - run: ./mvnw test

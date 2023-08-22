@@ -17,8 +17,10 @@
 package spark.route;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import spark.utils.SparkUtils;
+import spark.utils.StringUtils;
 
 /**
  * Class that holds information about routes
@@ -56,20 +58,35 @@ class RouteEntry {
         return match;
     }
 
-    private boolean matchPath(String path) { // NOSONAR
-        if (!this.path.endsWith("*") && ((path.endsWith("/") && !this.path.endsWith("/")) // NOSONAR
-                || (this.path.endsWith("/") && !path.endsWith("/")))) {
-            // One and not both ends with slash
-            return false;
-        }
-        if (this.path.equals(path)) {
+    //CS304 Issue link: https://github.com/perwendel/spark/issues/1151
+    private boolean matchPath(String input) { // NOSONAR
+        if (!this.path.endsWith("*") && this.path.equals(input)) {
             // Paths are the same
             return true;
+        }
+        // Regex expressions should start with '~/'  (end '/' is optional)
+        if(this.path.startsWith("~/")) {
+            String routePath = StringUtils.cleanRegex(this.path);
+            Pattern pattern = Pattern.compile(routePath, Pattern.CASE_INSENSITIVE);
+            return pattern.matcher(input).find();
+        }
+        // Match slashes (return false if they don't match except when it is optional)
+        if (!this.path.endsWith("*")
+            // If the user input has a slash on the end, either our path should end in slash or optional
+            && ((input.endsWith("/") && !(this.path.endsWith("/") || this.path.endsWith("/?"))) // NOSONAR
+            // If we specified that the path must finish with a slash, user input must as well
+            || (!input.endsWith("/") && this.path.endsWith("/")))) {
+            // One and not both ends with slash
+            return false;
         }
 
         // check params
         List<String> thisPathList = SparkUtils.convertRouteToList(this.path);
-        List<String> pathList = SparkUtils.convertRouteToList(path);
+        List<String> pathList = SparkUtils.convertRouteToList(input);
+        // Remove optional "/?" when using params
+        if(thisPathList.indexOf("?") == thisPathList.size() - 1) {
+            thisPathList.remove("?");
+        }
 
         int thisPathSize = thisPathList.size();
         int pathSize = pathList.size();
@@ -100,7 +117,7 @@ class RouteEntry {
             // Number of "path parts" not the same
             // check wild card:
             if (this.path.endsWith("*")) {
-                if (pathSize == (thisPathSize - 1) && (path.endsWith("/"))) {
+                if (pathSize == (thisPathSize - 1) && (input.endsWith("/"))) {
                     // Hack for making wildcards work with trailing slash
                     pathList.add("");
                     pathList.add("");
@@ -129,6 +146,19 @@ class RouteEntry {
                     return true;
                 }
                 // End check wild card
+            }
+            if (thisPathSize > pathSize) {
+                for (int i = pathSize - 1; i > -1; i--) {
+                    if(!thisPathList.get(i).equals(pathList.get(i))){
+                        return false;
+                    }
+                }
+                for (int i = pathSize; i < thisPathSize; i++) {
+                    if (!thisPathList.get(i).endsWith("?")) {
+                        return false;
+                    }
+                }
+                return true;
             }
             return false;
         }

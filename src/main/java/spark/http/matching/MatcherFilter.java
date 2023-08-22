@@ -19,14 +19,17 @@ package spark.http.matching;
 import spark.*;
 import spark.embeddedserver.jetty.HttpRequestWrapper;
 import spark.route.HttpMethod;
+import spark.routematch.RouteMatch;
 import spark.serialization.SerializerChain;
 import spark.staticfiles.StaticFilesConfiguration;
 
-import javax.servlet.Filter;
-import javax.servlet.*;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.Filter;
+import jakarta.servlet.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
+import java.net.URLDecoder;
 
 /**
  * Matches Spark routes and filters.
@@ -43,12 +46,12 @@ public class MatcherFilter implements Filter {
 
     private final StaticFilesConfiguration staticFiles;
 
-    private spark.route.Routes routeMatcher;
-    private SerializerChain serializerChain;
-    private ExceptionMapper exceptionMapper;
+    private final spark.route.Routes routeMatcher;
+    private final SerializerChain serializerChain;
+    private final ExceptionMapper exceptionMapper;
 
-    private boolean externalContainer;
-    private boolean hasOtherHandlers;
+    private final boolean externalContainer;
+    private final boolean hasOtherHandlers;
 
     /**
      * Constructor
@@ -90,10 +93,23 @@ public class MatcherFilter implements Filter {
 
         String httpMethodStr = method.toLowerCase();
         String uri = httpRequest.getRequestURI();
+        uri = URLDecoder.decode(uri, "UTF-8");
         String rawAcceptType = httpRequest.getHeader(ACCEPT_TYPE_REQUEST_MIME_HEADER);
         String acceptType = null;
         if (rawAcceptType != null) {
             acceptType = rawAcceptType.replaceAll("[\n|\r\t]", "_");
+        }
+
+        List<RouteMatch> routes = routeMatcher.findAll();
+        String firstAcceptType = null;
+        for (RouteMatch rm : routes) {
+            if (rm.getMatchUri().equals(uri)) {
+                firstAcceptType = rm.getAcceptType();
+                break;
+            }
+        }
+        if ("*/*".equals(acceptType) && firstAcceptType != null) {
+            acceptType = firstAcceptType;
         }
 
         Body body = Body.create();
@@ -126,7 +142,6 @@ public class MatcherFilter implements Filter {
                 }
                 Routes.execute(context);
                 AfterFilters.execute(context);
-
             } catch (HaltException halt) {
 
                 Halt.modify(httpResponse, body, halt);
@@ -149,22 +164,20 @@ public class MatcherFilter implements Filter {
                 body.set("");
             }
 
-            if (body.notSet() && hasOtherHandlers && servletRequest instanceof HttpRequestWrapper) {
-                ((HttpRequestWrapper) servletRequest).notConsumed(true);
-                return;
-            }
-
-            if (body.notSet() && !externalContainer) {
+            if (body.notSet()) {
+                int returnStatus;
+                if(httpMethodStr.equals("put") && response.status() == 200) returnStatus = HttpServletResponse.SC_METHOD_NOT_ALLOWED;
+                else returnStatus = HttpServletResponse.SC_NOT_FOUND;
                 LOG.info("The requested route [{}] has not been mapped in Spark for {}: [{}]",
-                    uri, ACCEPT_TYPE_REQUEST_MIME_HEADER, acceptType);
-                httpResponse.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                         uri, ACCEPT_TYPE_REQUEST_MIME_HEADER, acceptType);
+                httpResponse.setStatus(returnStatus);
 
-                if (CustomErrorPages.existsFor(404)) {
+                if (CustomErrorPages.existsFor(returnStatus)) {
                     requestWrapper.setDelegate(RequestResponseFactory.create(httpRequest));
                     responseWrapper.setDelegate(RequestResponseFactory.create(httpResponse));
-                    body.set(CustomErrorPages.getFor(404, requestWrapper, responseWrapper));
+                    body.set(CustomErrorPages.getFor(returnStatus, requestWrapper, responseWrapper));
                 } else {
-                    body.set(CustomErrorPages.NOT_FOUND);
+                    body.set(String.format(CustomErrorPages.NOT_FOUND));
                 }
             }
         } finally {
@@ -183,7 +196,7 @@ public class MatcherFilter implements Filter {
         }
 
         if (body.isSet()) {
-            body.serializeTo(httpResponse, serializerChain, httpRequest);
+            body.serializeTo(httpResponse, serializerChain, httpRequest, responseWrapper.compression);
         } else if (chain != null) {
             chain.doFilter(httpRequest, httpResponse);
         }

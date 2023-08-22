@@ -19,11 +19,11 @@ package spark.http.matching;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-import spark.utils.GzipUtils;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import spark.Response;
 import spark.serialization.SerializerChain;
+import spark.utils.CompressUtil;
 
 /**
  * Represents the 'body'
@@ -31,6 +31,9 @@ import spark.serialization.SerializerChain;
 final class Body {
 
     private Object content;
+    //CS304 Issue link: https://github.com/perwendel/spark/issues/1022
+    private boolean useEmpty = false;
+
 
     public static Body create() {
         return new Body();
@@ -56,17 +59,31 @@ final class Body {
         this.content = content;
     }
 
+
+    /**.
+     * CS304 Issue link: https://github.com/perwendel/spark/issues/1022
+     * modify line 80
+     * get default response content type
+     * if useEmpty is set, content type can be null
+     * otherwise null content type will be set to default
+     * @param httpResponse response to the request
+     * @param serializerChain Serialize the body to output stream
+     * @param httpRequest received request
+     * @throws IOException throw exception if there is Input/Output error.
+     */
     public void serializeTo(HttpServletResponse httpResponse,
                             SerializerChain serializerChain,
-                            HttpServletRequest httpRequest) throws IOException {
+                            HttpServletRequest httpRequest, Response.Compression compression) throws IOException {
 
         if (!httpResponse.isCommitted()) {
-            if (httpResponse.getContentType() == null) {
-                httpResponse.setContentType("text/html; charset=utf-8");
+            if (httpResponse.getContentType() == null && !useEmpty) {
+                //CS304 Issue link: https://github.com/perwendel/spark/issues/911
+                String type = Configuration.getDefaultcontentype();
+                httpResponse.setContentType(type);
             }
 
             // Check if GZIP is wanted/accepted and in that case handle that
-            OutputStream responseStream = GzipUtils.checkAndWrap(httpRequest, httpResponse, true);
+            OutputStream responseStream = CompressUtil.checkAndWrap(httpRequest, httpResponse, compression);
 
             // Serialize the body to output stream
             serializerChain.process(responseStream, content);
@@ -74,6 +91,15 @@ final class Body {
             responseStream.flush(); // needed for GZIP stream. Not sure where the HTTP response actually gets cleaned up
             responseStream.close(); // needed for GZIP
         }
+    }
+
+    /**
+     * CS304 Issue link: https://github.com/perwendel/spark/issues/1022
+     * setter for boolean useEmpty
+     * @param useEmpty {@code boolean} the value that will change to useEmpty
+     */
+    public void setUseEmpty(boolean useEmpty) {
+        this.useEmpty = useEmpty;
     }
 
 

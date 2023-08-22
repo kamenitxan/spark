@@ -16,21 +16,26 @@
  */
 package spark;
 
+import java.security.Security;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import org.conscrypt.OpenSSLProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import spark.embeddedserver.EmbeddedServer;
 import spark.embeddedserver.EmbeddedServers;
+import spark.embeddedserver.jetty.eventsource.EventSourceHandlerClassWrapper;
+import spark.embeddedserver.jetty.eventsource.EventSourceHandlerInstanceWrapper;
+import spark.embeddedserver.jetty.eventsource.EventSourceHandlerWrapper;
 import spark.embeddedserver.jetty.websocket.WebSocketHandlerClassWrapper;
 import spark.embeddedserver.jetty.websocket.WebSocketHandlerInstanceWrapper;
 import spark.embeddedserver.jetty.websocket.WebSocketHandlerWrapper;
@@ -64,10 +69,13 @@ public final class Service extends Routable {
 
     protected int port = SPARK_DEFAULT_PORT;
     protected String ipAddress = "0.0.0.0";
+    protected boolean http2Enabled = false;
 
     protected SslStores sslStores;
 
     protected Map<String, WebSocketHandlerWrapper> webSocketHandlers = null;
+
+    protected Map<String, EventSourceHandlerWrapper> eventSourceHandlers = null;
 
     protected int maxThreads = -1;
     protected int minThreads = -1;
@@ -87,7 +95,7 @@ public final class Service extends Routable {
     public final StaticFiles staticFiles;
 
     private final StaticFilesConfiguration staticFilesConfiguration;
-    private final ExceptionMapper exceptionMapper = new ExceptionMapper();
+    private final ExceptionMapper exceptionMapper;
 
     // default exception handler during initialization phase
     private Consumer<Exception> initExceptionHandler = (e) -> {
@@ -113,8 +121,10 @@ public final class Service extends Routable {
 
         if (isRunningFromServlet()) {
             staticFilesConfiguration = StaticFilesConfiguration.servletInstance;
+            exceptionMapper = ExceptionMapper.getServletInstance();
         } else {
             staticFilesConfiguration = StaticFilesConfiguration.create();
+            exceptionMapper = new ExceptionMapper();
         }
     }
 
@@ -154,6 +164,44 @@ public final class Service extends Routable {
         this.ipAddress = ipAddress;
 
         return this;
+    }
+
+    /**
+     * Enables HTTP 2
+     *
+     * We had 3 options for ALPN (Application-Layer Protocol Negotiation):
+     * 1. jetty-alpn-openjdk8-server for JDK 8
+     * 2. jetty-alpn-java-server for JDK >= 9
+     * 3. jetty-alpn-conscrypt-server for native SSL implementation (JDK >= 8)
+     * We decided to use #3 to cover all Java versions. This requires
+     * to add the following line before enabling http2:
+     * "Security.insertProviderAt(new OpenSSLProvider(), 1);"
+     * Docs for the ALPN are available at:
+     * https://www.eclipse.org/jetty/documentation/current/alpn-chapter.html
+     *
+     * @return the object with HTTP 2 enabled
+     */
+    public synchronized Service http2() {
+        if (initialized) {
+            throwBeforeRouteMappingException();
+        }
+        Security.insertProviderAt(new OpenSSLProvider(), 1);
+        this.http2Enabled = true;
+        return this;
+    }
+
+    /**
+     * Retrieves the ip address of Spark server.
+     *
+     * @return The ip address of Spark server.
+     * @throws IllegalStateException when the server is not started
+     */
+    public synchronized String ipAddress() {
+        if (initialized) {
+            return ipAddress;
+        } else {
+            throw new IllegalStateException("This must be done after route mapping has begun");
+        }
     }
 
     /**
@@ -274,9 +322,9 @@ public final class Service extends Routable {
      * @param certAlias          the default certificate Alias
      * @param truststoreFile     the truststore file location as string, leave null to reuse
      *                           keystore
+     * @param truststorePassword the trust store password
      * @param needsClientCert    Whether to require client certificate to be supplied in
      *                           request
-     * @param truststorePassword the trust store password
      * @return the object with connection set to be secure
      */
     public synchronized Service secure(String keystoreFile,
@@ -285,17 +333,56 @@ public final class Service extends Routable {
                                        String truststoreFile,
                                        String truststorePassword,
                                        boolean needsClientCert) {
+        return secure(keystoreFile, keystorePassword, certAlias, truststoreFile, truststorePassword, needsClientCert, "HTTPS");
+    }
+
+    /**
+     * Set the connection to be secure, using the specified keystore and
+     * truststore. This has to be called before any route mapping is done. You
+     * have to supply a keystore file, truststore file is optional (keystore
+     * will be reused).
+     * This method is only relevant when using embedded Jetty servers. It should
+     * not be used if you are using Servlets, where you will need to secure the
+     * connection in the servlet container
+     *
+     * @param keystoreFile                    The keystore file location as string
+     * @param keystorePassword                the password for the keystore
+     * @param certAlias                       the default certificate Alias
+     * @param truststoreFile                  the truststore file location as string, leave null to reuse
+     *                                        keystore
+     * @param truststorePassword              the trust store password
+     * @param needsClientCert                 Whether to require client certificate to be supplied in
+     *                                        request
+     * @param endpointIdentificationAlgorithm Endpoint identification algorithm:
+     *                                        "HTTPS", "LDAPS" or null
+     * @return Service
+     */
+    public synchronized Service secure(String keystoreFile,
+                                       String keystorePassword,
+                                       String certAlias,
+                                       String truststoreFile,
+                                       String truststorePassword,
+                                       boolean needsClientCert,
+                                       String endpointIdentificationAlgorithm) {
         if (initialized) {
             throwBeforeRouteMappingException();
         }
 
         if (keystoreFile == null) {
             throw new IllegalArgumentException(
-                    "Must provide a keystore file to run secured");
+                "Must provide a keystore file to run secured");
         }
 
-        sslStores = SslStores.create(keystoreFile, keystorePassword, certAlias, truststoreFile, truststorePassword, needsClientCert);
+        sslStores = SslStores.create(keystoreFile, keystorePassword, certAlias, truststoreFile, truststorePassword, needsClientCert, endpointIdentificationAlgorithm);
         return this;
+    }
+
+    public synchronized SslStores sslStores() {
+        if (initialized) {
+            return sslStores;
+        } else {
+            throw new IllegalStateException("This must be done after route mapping has begun");
+        }
     }
 
     /**
@@ -339,12 +426,7 @@ public final class Service extends Routable {
         if (initialized && !isRunningFromServlet()) {
             throwBeforeRouteMappingException();
         }
-
-        if (!staticFilesConfiguration.isStaticResourcesSet()) {
-            staticFilesConfiguration.configure(folder);
-        } else {
-            LOG.warn("Static file location has already been set");
-        }
+        staticFilesConfiguration.configure(folder);
         return this;
     }
 
@@ -360,11 +442,7 @@ public final class Service extends Routable {
             throwBeforeRouteMappingException();
         }
 
-        if (!staticFilesConfiguration.isExternalStaticResourcesSet()) {
-            staticFilesConfiguration.configureExternal(externalFolder);
-        } else {
-            LOG.warn("External static file location has already been set");
-        }
+        staticFilesConfiguration.configureExternal(externalFolder);
         return this;
     }
 
@@ -452,6 +530,37 @@ public final class Service extends Routable {
     }
 
     /**
+     * Maps the given path to the given EventSource servlet class.
+     * <p>
+     * This is currently only available in the embedded server mode.
+     *
+     * @param path         the EventSource path.
+     * @param handlerClass the handler class that will manage the EventSource connection to the given path.
+     */
+    public void eventSource(String path, Class<?> handlerClass) {
+        addEventSourceHandler(path, new EventSourceHandlerClassWrapper(handlerClass));
+    }
+
+    public void eventSource(String path, Object handler) {
+        addEventSourceHandler(path, new EventSourceHandlerInstanceWrapper(handler));
+    }
+
+    private synchronized void addEventSourceHandler(String path, EventSourceHandlerWrapper handlerWrapper) {
+        if (initialized) {
+            throwBeforeRouteMappingException();
+        }
+        if (isRunningFromServlet()) {
+            throw new IllegalStateException("EventSource are only supported in the embedded server");
+        }
+        requireNonNull(path, "EventSource path cannot be null");
+        if (eventSourceHandlers == null) {
+            eventSourceHandlers = new HashMap<>();
+        }
+
+        eventSourceHandlers.put(path, handlerWrapper);
+    }
+
+    /**
      * Maps 404 errors to the provided custom page
      *
      * @param page the custom 404 error page.
@@ -506,7 +615,7 @@ public final class Service extends Routable {
     }
 
     private boolean hasMultipleHandlers() {
-        return webSocketHandlers != null;
+        return webSocketHandlers != null || eventSourceHandlers != null;
     }
 
 
@@ -629,6 +738,7 @@ public final class Service extends Routable {
 
                     server.configureWebSockets(webSocketHandlers, webSocketIdleTimeoutMillis);
                     server.trustForwardHeaders(trustForwardHeaders);
+                    //server.configureEventSourcing(eventSourceHandlers);
 
                     port = server.ignite(
                             ipAddress,
@@ -636,7 +746,8 @@ public final class Service extends Routable {
                             sslStores,
                             maxThreads,
                             minThreads,
-                            threadIdleTimeoutMillis);
+                            threadIdleTimeoutMillis,
+                            http2Enabled);
                   } catch (Exception e) {
                     initExceptionHandler.accept(e);
                   }
@@ -747,7 +858,7 @@ public final class Service extends Routable {
 
     /**
      * Sets Spark to trust the HTTP headers that are commonly used in reverse proxies.
-     * More info at https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html
+     * More info at <a href="https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html">...</a>
      */
     public synchronized Service trustForwardHeaders() {
         if (initialized) {
@@ -760,7 +871,7 @@ public final class Service extends Routable {
 
     /**
      * Sets Spark to NOT trust the HTTP headers that are commonly used in reverse proxies.
-     * More info at https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html
+     * More info at <a href="https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html">...</a>
      */
     public synchronized Service untrustForwardHeaders() {
         if (initialized) {

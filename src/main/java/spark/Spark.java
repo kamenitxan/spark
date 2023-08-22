@@ -16,10 +16,11 @@
  */
 package spark;
 
-import spark.routematch.RouteMatch;
-
 import java.util.List;
 import java.util.function.Consumer;
+
+import spark.routematch.RouteMatch;
+import spark.ssl.SslStores;
 
 import static spark.Service.ignite;
 
@@ -967,6 +968,7 @@ public class Spark {
      * @param ipAddress The ipAddress
      * @deprecated replaced by {@link #ipAddress(String)}
      */
+    @Deprecated
     public static void setIpAddress(String ipAddress) {
         getInstance().ipAddress(ipAddress);
     }
@@ -983,9 +985,16 @@ public class Spark {
     }
 
     /**
+     * Enables HTTP 2
+     */
+    public static void http2() {
+        getInstance().http2();
+    }
+
+    /**
      * Set the default response transformer. All requests not using a custom transformer will use this one
      *
-     * @param transformer
+     * @param transformer response transformer
      */
     public static void defaultResponseTransformer(ResponseTransformer transformer) {
         getInstance().defaultResponseTransformer(transformer);
@@ -999,6 +1008,7 @@ public class Spark {
      * @param port The port number
      * @deprecated replaced by {@link #port(int)}
      */
+    @Deprecated
     public static void setPort(int port) {
         getInstance().port(port);
     }
@@ -1040,6 +1050,7 @@ public class Spark {
      * @param truststorePassword the trust store password
      * @deprecated replaced by {@link #secure(String, String, String, String)}
      */
+    @Deprecated
     public static void setSecure(String keystoreFile,
                                  String keystorePassword,
                                  String truststoreFile,
@@ -1155,6 +1166,35 @@ public class Spark {
     }
 
     /**
+     * Set the connection to be secure, using the specified keystore and
+     * truststore. This has to be called before any route mapping is done. You
+     * have to supply a keystore file, truststore file is optional (keystore
+     * will be reused).
+     * This method is only relevant when using embedded Jetty servers. It should
+     * not be used if you are using Servlets, where you will need to secure the
+     * connection in the servlet container
+     *
+     * @param keystoreFile                    The keystore file location as string
+     * @param keystorePassword                the password for the keystore
+     * @param certAlias                       the default certificate Alias
+     * @param truststoreFile                  the truststore file location as string, leave null to reuse
+     *                                        keystore
+     * @param truststorePassword              the trust store password
+     * @param needsClientCert                 Whether to require client certificate to be supplied in
+     *                                        request
+     * @param endpointIdentificationAlgorithm endpoint identification algorithm
+     */
+    public static void secure(String keystoreFile,
+        String keystorePassword,
+        String certAlias,
+        String truststoreFile,
+        String truststorePassword,
+        boolean needsClientCert,
+        String endpointIdentificationAlgorithm) {
+        getInstance().secure(keystoreFile, keystorePassword, certAlias, truststoreFile, truststorePassword, needsClientCert, endpointIdentificationAlgorithm);
+    }
+
+    /**
      * Configures the embedded web server's thread pool.
      *
      * @param maxThreads max nbr of threads.
@@ -1212,7 +1252,7 @@ public class Spark {
     public static void stop() {
         getInstance().stop();
     }
-    
+
     /**
      * Waits for the Spark server to be stopped.
      * If it's already stopped, will return immediately.
@@ -1249,6 +1289,24 @@ public class Spark {
         getInstance().webSocketIdleTimeoutMillis(timeoutMillis);
     }
 
+    /////////////////
+    // EventSource //
+
+    /**
+     * Maps the given path to the given EventSource handler.
+     * <p>
+     * This is currently only available in the embedded server mode.
+     *
+     * @param path    the EventSource path.
+     * @param handler the handler class that will manage the EventSource connection to the given path.
+     */
+    public static void eventSource(String path, Class<?> handler){
+        getInstance().eventSource(path, handler);
+    }
+
+    public static void eventSource(String path, Object handler){
+        getInstance().eventSource(path, handler);
+    }
     /**
      * Maps 404 Not Found errors to the provided custom page
      */
@@ -1282,7 +1340,7 @@ public class Spark {
 
     /**
      * Sets Spark to trust Forwarded, X-Forwarded-Host, X-Forwarded-Server, X-Forwarded-For, X-Forwarded-Proto, X-Proxied-Https headers
-     * as defined at https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html
+     * as defined at <a href="https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html">...</a>
      */
     public static void trustForwardHeaders() {
         getInstance().trustForwardHeaders();
@@ -1290,7 +1348,7 @@ public class Spark {
 
     /**
      * Sets Spark to NOT trust Forwarded, X-Forwarded-Host, X-Forwarded-Server, X-Forwarded-For, X-Forwarded-Proto, X-Proxied-Https headers
-     * as defined at https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html
+     * as defined at <a href="https://www.eclipse.org/jetty/javadoc/current/org/eclipse/jetty/server/ForwardedRequestCustomizer.html">...</a>
      */
     public static void untrustForwardHeaders() {
         getInstance().untrustForwardHeaders();
@@ -1326,6 +1384,26 @@ public class Spark {
      */
     public static int activeThreadCount() {
         return getInstance().activeThreadCount();
+    }
+    
+    /**
+     * @return The ip address of server
+     */
+    static String serverIP() { return getInstance().ipAddress(); }
+    /**
+     * @return The port number of server
+     */
+    static int serverPort() { return getInstance().port(); }
+    /**
+     * @return Whether the server need a client certification
+     */
+    static boolean serverNeedClientCert() {
+        SslStores sslStores = getInstance().sslStores();
+        if(sslStores==null) {
+            return false;
+        } else {
+            return sslStores.needsClientCert();
+        }
     }
 
 

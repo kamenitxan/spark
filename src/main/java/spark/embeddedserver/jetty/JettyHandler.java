@@ -17,14 +17,17 @@
 package spark.embeddedserver.jetty;
 
 import java.io.IOException;
+import java.util.Set;
 
-import javax.servlet.Filter;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
+import org.eclipse.jetty.http.HttpMethod;
+import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.session.SessionHandler;
+
+import jakarta.servlet.Filter;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Simple Jetty Handler
@@ -33,7 +36,9 @@ import org.eclipse.jetty.server.session.SessionHandler;
  */
 public class JettyHandler extends SessionHandler {
 
-    private Filter filter;
+    private final Filter filter;
+
+    private Set<String> consume;
 
     public JettyHandler(Filter filter) {
         this.filter = filter;
@@ -41,20 +46,32 @@ public class JettyHandler extends SessionHandler {
 
     @Override
     public void doHandle(
-            String target,
-            Request baseRequest,
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException, ServletException {
+        String target,
+        Request baseRequest,
+        HttpServletRequest request,
+        HttpServletResponse response) throws IOException, ServletException {
 
         HttpRequestWrapper wrapper = new HttpRequestWrapper(request);
-        filter.doFilter(wrapper, response, null);
-
-        if (wrapper.notConsumed()) {
-            baseRequest.setHandled(false);
-        } else {
-            baseRequest.setHandled(true);
+        HttpMethod method = HttpMethod.fromString(request.getMethod().trim().toUpperCase());
+        if(method == null) {
+            response.sendError(HttpStatus.METHOD_NOT_ALLOWED_405);
+            return;
         }
 
+        if(consume!=null && consume.contains(baseRequest.getRequestURI())){
+            wrapper.notConsumed(true);
+        } else {
+            filter.doFilter(wrapper, response, null);
+        }
+
+        baseRequest.setHandled(!wrapper.notConsumed());
     }
 
+    public void consume(Set<String> consume){
+        this.consume=consume;
+    }
+
+    public Set<String> consume(){
+        return this.consume;
+    }
 }
