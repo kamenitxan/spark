@@ -24,7 +24,7 @@ In order to use this fork version, you need to change your spark dependency.
 <dependency>
   <groupId>com.intellisrc</groupId>
   <artifactId>spark-core</artifactId>
-  <version>2.9.4-unofficial-5</version>
+  <version>2.9.4-jakon-3</version>
 </dependency>
 ```
 
